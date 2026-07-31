@@ -262,3 +262,118 @@ Then submit the GitHub repository link as instructed.
 - [Python Downloads](https://www.python.org/downloads/)
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/)
 - [GitHub SSH Setup Guide](https://docs.github.com/en/authentication/connecting-to-github-with-ssh)
+
+---
+
+# 📡 API Overview
+
+| Method | Path                 | Auth required | Description                                        |
+| ------ | -------------------- | -------------- | ---------------------------------------------------- |
+| GET    | `/`                  | No              | Landing page                                        |
+| GET    | `/register`          | No              | Registration page (HTML)                            |
+| GET    | `/login`             | No              | Login page (HTML)                                   |
+| GET    | `/dashboard`         | No*             | Dashboard page (HTML) \*client-side JS redirects to `/login` if no token is stored |
+| GET    | `/health`            | No              | Health check, returns `{"status": "ok"}`             |
+| POST   | `/register`          | No              | Register a new user (JSON, `UserCreate` schema)      |
+| POST   | `/login`             | No              | Log in with JSON `{username, password}`, returns a JWT + refresh token |
+| POST   | `/auth/token`        | No              | OAuth2 form login (used by Swagger's "Authorize" button) |
+| POST   | `/calculations`      | Yes (Bearer)    | Create a calculation                                |
+| GET    | `/calculations`      | Yes (Bearer)    | List the current user's calculations (Browse)        |
+| GET    | `/calculations/{id}` | Yes (Bearer)    | Read a single calculation                            |
+| PUT    | `/calculations/{id}` | Yes (Bearer)    | Update a calculation's inputs (recomputes result)     |
+| DELETE | `/calculations/{id}` | Yes (Bearer)    | Delete a calculation                                 |
+
+`/register` and `/login` each have two operations at the same path — a `GET` that serves the HTML page and a `POST` that's the JSON API the page's JavaScript calls.
+
+---
+
+# 🔐 Environment Variables
+
+All variables below have working defaults, so the app runs out of the box; override them via a `.env` file or your environment for anything beyond local dev.
+
+| Variable                      | Default (dev)                                              | Purpose                                  |
+| ------------------------------ | ------------------------------------------------------------ | ------------------------------------------ |
+| `DATABASE_URL`                 | `postgresql://postgres:postgres@localhost:5432/fastapi_db`  | SQLAlchemy Postgres connection string    |
+| `JWT_SECRET_KEY`                | placeholder string                                          | Signs access tokens                      |
+| `JWT_REFRESH_SECRET_KEY`       | placeholder string                                          | Signs refresh tokens                     |
+| `ALGORITHM`                    | `HS256`                                                     | JWT signing algorithm                    |
+| `ACCESS_TOKEN_EXPIRE_MINUTES`  | `30`                                                        | Access token lifetime                    |
+| `REFRESH_TOKEN_EXPIRE_DAYS`    | `7`                                                          | Refresh token lifetime                   |
+| `BCRYPT_ROUNDS`                 | `12`                                                        | Password hashing cost factor             |
+
+`docker-compose.yml` already sets these for local development.
+
+---
+
+# 🖥️ Running the Front-End Locally
+
+```bash
+docker-compose up
+```
+
+Then visit:
+
+- [http://localhost:8000/](http://localhost:8000/) — landing page
+- [http://localhost:8000/register](http://localhost:8000/register) — create an account
+- [http://localhost:8000/login](http://localhost:8000/login) — log in (stores the JWT in `localStorage`)
+- [http://localhost:8000/dashboard](http://localhost:8000/dashboard) — authenticated dashboard (create/list/delete calculations)
+
+Interactive API docs are available at [`/docs`](http://localhost:8000/docs) or [`/redoc`](http://localhost:8000/redoc). To exercise protected endpoints from Swagger, click **Authorize** and log in against `/auth/token`.
+
+---
+
+# 🧪 Running Playwright E2E Tests Locally
+
+1. Install dependencies and the Playwright browser binary:
+
+```bash
+pip install -r requirements.txt
+playwright install chromium
+```
+
+2. Start Postgres:
+
+```bash
+docker-compose up -d db
+```
+
+3. Run the E2E suite (spins up its own `uvicorn` subprocess automatically via the `fastapi_server` fixture — no need to run the app separately):
+
+```bash
+pytest tests/e2e/test_auth_pages.py -v
+```
+
+Or run the full test suite (unit + integration + e2e):
+
+```bash
+pytest
+```
+
+Useful flags: `pytest --run-slow` (also run `@pytest.mark.slow` tests), `pytest --preserve-db` (keep the test database after the run).
+
+---
+
+# ⚙️ CI/CD
+
+![CI/CD](https://github.com/HackAndQuack/Project-IS218-Module-13/actions/workflows/ci-cd.yml/badge.svg)
+
+GitHub Actions (`.github/workflows/ci-cd.yml`) runs two jobs:
+
+- **`test`** — runs on every push and pull request against `main`. Spins up a `postgres:17` service container, installs dependencies and Playwright's Chromium browser, and runs the full `pytest` suite (including the Playwright E2E tests).
+- **`build-and-push`** — runs only on pushes to `main` or version tags (never on pull requests), after `test` passes. Builds the Docker image and pushes it to Docker Hub.
+
+Before `build-and-push` can succeed, add two **repository secrets** (Settings → Secrets and variables → Actions → New repository secret):
+
+- `DOCKERHUB_USERNAME` — your Docker Hub username.
+- `DOCKERHUB_TOKEN` — a Docker Hub **access token** (Account Settings → Security → Access Tokens), not your account password.
+
+---
+
+# 🐳 Docker Hub
+
+Image: [`hackandquack/project-is218-module-13`](https://hub.docker.com/r/hackandquack/project-is218-module-13)
+
+```bash
+docker pull hackandquack/project-is218-module-13:latest
+docker run -p 8000:8000 --env-file .env hackandquack/project-is218-module-13:latest
+```
